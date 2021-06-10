@@ -55,9 +55,7 @@ const parseChar: Parser<string> = (ctx: Context) => {
 
 const parseString: (s: string) => Parser<string> = (s: string) => (ctx: Context) => {
   if (ctx.index + s.length <= ctx.text.length) {
-    console.log('right lenght')
     if (ctx.text.substring(ctx.index, ctx.index + s.length) === s) {
-      console.log('right text')
       return success(moveIndex(ctx, s.length), s);
     }
   }
