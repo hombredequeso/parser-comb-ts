@@ -44,6 +44,12 @@ function failure(ctx: Context, expected: string): Failure {
   return { success: false, expected, ctx };
 }
 
+function lift<T>(value: T): Parser<T> {
+  return (ctx) => {
+    success(ctx, value);
+  }
+}
+
 const parseChar: Parser<string> = (ctx: Context) => {
   if (ctx.text.length > ctx.index) {
     return success(
@@ -61,21 +67,6 @@ const parseString: (s: string) => Parser<string> = (s: string) => (ctx: Context)
   }
   return failure(ctx, "no characters");
 };
-
-const constParser = <A,B>(a:A,b:B) => {
-  return (ctx: Context) => {
-    return success(ctx, [a,b])
-  };
-}
-
-function andThen<A,B>(parserA: Parser<A>, f: (a:A) => Parser<B>): Parser<B> {
-  return (ctx: Context) => {
-    const aResult = parserA(ctx);
-    return aResult.success?
-      f(aResult.value)(aResult.ctx):
-      aResult;
-  }
-}
 
 describe('parseChar', () => {
   test('fails when there are no characters', () => {
@@ -114,6 +105,13 @@ describe('parseString', () => {
   });
 })
 
+const constParser = <A,B>(a:A,b:B) => {
+  return (ctx: Context) => {
+    return success(ctx, [a,b])
+  };
+}
+
+
 describe('constParser', () => {
 
   test('consumes no input and returns what it got', () => {
@@ -124,16 +122,25 @@ describe('constParser', () => {
   });
 })
 
-describe('andThen', () => {
+function bind<A,B>(parserA: Parser<A>, f: (a:A) => Parser<B>): Parser<B> {
+  return (ctx: Context) => {
+    const aResult = parserA(ctx);
+    return aResult.success?
+      f(aResult.value)(aResult.ctx):
+      aResult;
+  }
+}
 
-  test('andThen sequentially parses part1 then part2', () => {
+describe('bind', () => {
+
+  test('bind sequentially parses part1 then part2', () => {
     const ctx = {text: "abcxyz", index:0};
     const part1Parser = parseString("abc");
     const part2Parser = parseString("xyz");
 
     const f = (s: String) => part2Parser;
 
-    const bothParsers: Parser<String> = andThen(part1Parser, f);
+    const bothParsers: Parser<String> = bind(part1Parser, f);
     const result = bothParsers(ctx);
 
     expect(result).toEqual(success({text: "abcxyz", index:6}, "xyz"))
@@ -147,9 +154,9 @@ describe('andThen', () => {
     const f = (s: String) => part2Parser;
 
     const bothParsers: Parser<String> = 
-      andThen(
+      bind(
         part1Parser, 
-        part1 => andThen(
+        part1 => bind(
             part2Parser,
             part2 => constParser(part1, part2)
           )
