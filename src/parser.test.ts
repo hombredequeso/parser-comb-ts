@@ -21,14 +21,14 @@ type Result<T> = Success<T> | Failure;
 type Success<T> = Readonly<{
   success: true;
   value: T;
-  ctx: Ctx;
+  ctx: Context;
 }>;
 
 // when we fail we want to know where and why
 type Failure = Readonly<{
   success: false;
   expected: string;
-  ctx: Ctx;
+  ctx: Context;
 }>;
 
 // every parsing function will have this signature
@@ -36,11 +36,11 @@ type Parser<T> = (ctx: Context) => Result<T>;
 
 
 // some convenience methods to build `Result`s for us
-function success<T>(ctx: Context, value: T): Success<T> {
+const success : <T>(ctx: Context, value: T) => Success<T> = <T>(ctx: Context, value: T): Success<T> => {
   return { success: true, value, ctx };
 }
 
-function failure(ctx: Context, expected: string): Failure {
+const failure = (ctx: Context, expected: string): Failure => {
   return { success: false, expected, ctx };
 }
 
@@ -119,14 +119,14 @@ describe('lift', () => {
 // You already use it. It's Array.flatMap
 // (x: A[], f: (a:A) => B[]): B[]
 // Although usually expressed in OO form where x is the 'this' object.
-function bind<A,B>(parserA: Parser<A>, f: (a:A) => Parser<B>): Parser<B> {
-  return (ctx: Context) => {
-    const aResult = parserA(ctx);
-    return aResult.success?
-      f(aResult.value)(aResult.ctx):
-      aResult;
+const bind = <A,B>(parserA: Parser<A>, f: (a:A) => Parser<B>): Parser<B> => 
+  (ctx: Context) => {
+    const resultA: Result<A> = parserA(ctx);
+    const resultB: Result<B> = resultA.success?
+      f(resultA.value)(resultA.ctx):
+      resultA;
+    return resultB;
   }
-}
 
 describe('bind', () => {
 
@@ -150,7 +150,7 @@ describe('bind', () => {
 
     const f = (s: String) => part2Parser;
 
-    const bothParsers: Parser<String> = 
+    const bothParsers: Parser<string[]> = 
       bind(
         part1Parser, 
         part1 => bind(
@@ -164,12 +164,12 @@ describe('bind', () => {
   })
 })
 
-function alternative<A>(parser1: Parser<A>, parser2: Parser<A>): Parser<A> {
-  return (ctx: Context) => {
-    const result1 = parser1(ctx);
-    return result1.success? result1 : parser2(ctx)
+const alternative = <A>(parser1: Parser<A>, parser2: Parser<A>): Parser<A> => 
+  (ctx: Context) => {
+    const result1: Result<A> = parser1(ctx);
+    const result: Result<A> = result1.success? result1 : parser2(ctx)
+    return result;
   };
-}
 
 
 describe('alternative tests', () => {
@@ -201,7 +201,7 @@ describe('alternative tests', () => {
   })
 })
 
-function map<A,B>(parserA: Parser<A>, f: (a:A) => B): Parser<B> {
+const map = <A,B>(parserA: Parser<A>, f: (a:A) => B): Parser<B> => {
   return (ctx: Context) => {
     const aResult = parserA(ctx);
     return aResult.success?
@@ -215,7 +215,7 @@ describe('map', () => {
   test('maps entity inside the parser', () => {
     const ctx = {text:"123", index:0};
     const parser: Parser<string> =  parseString("123");
-    const f = (s: String) => parseInt(s)
+    const f = (s: string) => parseInt(s)
     const numberParser: Parser<number> = map(parser, f);
     expect(numberParser(ctx)).toEqual(success({text:"123", index:3}, 123))
   })
