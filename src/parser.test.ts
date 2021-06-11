@@ -44,12 +44,6 @@ function failure(ctx: Context, expected: string): Failure {
   return { success: false, expected, ctx };
 }
 
-function lift<T>(value: T): Parser<T> {
-  return (ctx) => {
-    success(ctx, value);
-  }
-}
-
 const parseChar: Parser<string> = (ctx: Context) => {
   if (ctx.text.length > ctx.index) {
     return success(
@@ -105,23 +99,26 @@ describe('parseString', () => {
   });
 })
 
-const constParser = <A,B>(a:A,b:B) => {
-  return (ctx: Context) => {
-    return success(ctx, [a,b])
-  };
-}
 
+const lift = <T>(value: T): Parser<T> => 
+  (ctx) => success(ctx, value);
 
-describe('constParser', () => {
-
-  test('consumes no input and returns what it got', () => {
+describe('lift', () => {
+  test('lifts a value into the context of a parser', () => {
     const ctx = {text: "", index:0};
-    const parser = constParser("abc", 1);
+    const parser = lift(["abc", 1]);
     const result = parser(ctx);
     expect(result).toEqual(success(ctx, ["abc", 1]));
   });
 })
 
+
+// This is one of the key elements of the famous monad (be very afraid)
+// Note the structure of the signature, replacing Parser with W
+// (x: W<A>, f: (a:A) => W<B>): W<B>
+// You already use it. It's Array.flatMap
+// (x: A[], f: (a:A) => B[]): B[]
+// Although usually expressed in OO form where x is the 'this' object.
 function bind<A,B>(parserA: Parser<A>, f: (a:A) => Parser<B>): Parser<B> {
   return (ctx: Context) => {
     const aResult = parserA(ctx);
@@ -158,9 +155,8 @@ describe('bind', () => {
         part1Parser, 
         part1 => bind(
             part2Parser,
-            part2 => constParser(part1, part2)
+            part2 => lift([part1, part2])
           )
-        
       );
     const result = bothParsers(ctx);
 
