@@ -197,3 +197,23 @@ describe('alternative tests', () => {
     expect(altParser(ctx)).toEqual(success({text: "xyzazzz", index:3}, "xyz"));
   })
 })
+
+function map<A,B>(parserA: Parser<A>, f: (a:A) => B): Parser<B> {
+  return (ctx: Context) => {
+    const aResult = parserA(ctx);
+    return aResult.success?
+      success(aResult.ctx, f(aResult.value)) :
+      aResult;
+  }
+}
+
+describe('map', () => {
+
+  test('maps entity inside the parser', () => {
+    const ctx = {text:"123", index:0};
+    const parser: Parser<string> =  parseString("123");
+    const f = (s: String) => parseInt(s)
+    const numberParser: Parser<number> = map(parser, f);
+    expect(numberParser(ctx)).toEqual(success({text:"123", index:3}, 123))
+  })
+})
