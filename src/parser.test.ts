@@ -128,6 +128,21 @@ const bind = <A,B>(parserA: Parser<A>, f: (a:A) => Parser<B>): Parser<B> =>
     return resultB;
   }
 
+// Parses A, then B. Successful if both are successful, fails if either fail.
+const sequential = <A,B>(parserA: Parser<A>, parserB: Parser<B>): Parser<[A, B]> => 
+  (ctx: Context) => {
+    const resultA: Result<A> = parserA(ctx);
+    if (resultA.success) {
+      const resultB = parserB(resultA.ctx);
+      if (resultB.success) {
+        const successResult: Success<[A,B]> = success(resultB.ctx, [resultA.value, resultB.value])
+        return successResult;
+      }
+    }
+    const failureResult = failure(ctx, "could not parse A then B")
+    return failureResult;
+  }
+
 describe('bind', () => {
 
   test('bind sequentially parses part1 then part2', () => {
@@ -219,4 +234,136 @@ describe('map', () => {
     const numberParser: Parser<number> = map(parser, f);
     expect(numberParser(ctx)).toEqual(success({text:"123", index:3}, 123))
   })
+})
+
+
+// Recursive Parser<T[]>
+const parseUpToNRecursive: <T>(parser: Parser<T>, max: number)=> Parser<T[]> = <T>(parser: Parser<T>, max: number): Parser<T[]> =>
+(ctx: Context) => {
+  if (max < 0)
+    throw "Invalid use of parseUpToNRecursive";
+
+  if (max === 0) {
+    return success(ctx, []);
+  }
+
+  const r1 = parser(ctx);
+
+  if (r1.success) {
+    const r2: Success<T[]> = success(r1.ctx, [r1.value])
+    const theRest = parseUpToNRecursive(parser, max - 1)(r1.ctx);
+
+    return theRest.success ?
+      success(theRest.ctx, r2.value.concat(theRest.value)): 
+      r2;
+  } else {
+    return success(ctx, [])
+  }
+}
+
+
+// List.Reduce Parser<T[]>
+const parseUpToNReduce: <T>(parser: Parser<T>, max: number)=> Parser<T[]> = <T>(parser: Parser<T>, max: number): Parser<T[]> =>
+(ctx: Context) => {
+  if (max < 0)
+    throw "InvalidparseUpToNReduceuse of parseUpToNV2";
+
+  if (max === 0) {
+    return success(ctx, []);
+  }
+
+  const a = Array(max).fill(parser);
+
+  const initialValue: Success<T[]> = success(ctx, []);
+  const reducer = (prev: Success<T[]>, current: Parser<T>) => {
+    const r1: Result<T> = current(prev.ctx);
+    return r1.success?
+       success(r1.ctx, prev.value.concat([r1.value]))
+       : prev;
+  };
+  const result: Success<T[]> = a.reduce(reducer, initialValue)
+  return result;
+}
+
+
+describe('parseUpToNRecursive', () => {
+  test('return success if there is nothing to parse', () => {
+    const ctx = {text:"", index:0};
+    const charParser: Parser<string> = parseChar;
+    const parser: Parser<string[]> =  parseUpToNRecursive(charParser, 1);
+
+    const result = parser(ctx);
+
+    expect(result).toEqual(success(ctx, []));
+  })
+
+  test('returns success if there is one to parse', () => {
+    const ctx = {text:"a", index:0};
+    const charParser: Parser<string> = parseChar;
+    const parser: Parser<string[]> =  parseUpToNRecursive(charParser, 1);
+
+    const result = parser(ctx);
+
+    const endCxt = {text: "a", index: 1};
+    expect(result).toEqual(success(endCxt, ["a"]))
+  })
+
+  test('returns success if there is more than 1 to parse', () => {
+    const ctx = {text:"abc", index:0};
+    const charParser: Parser<string> = parseChar;
+    const parser: Parser<string[]> =  parseUpToNRecursive(charParser, 2);
+
+    const result = parser(ctx);
+
+    const endCxt = {text: "abc", index: 2};
+    expect(result).toEqual(success(endCxt, ["a", "b"]))
+  })
+
+})
+
+
+describe('parseUpToNReduce', () => {
+  test('return success if there is nothing to parse', () => {
+    const ctx = {text:"", index:0};
+    const charParser: Parser<string> = parseChar;
+    const parser: Parser<string[]> =  parseUpToNReduce(charParser, 1);
+
+    const result = parser(ctx);
+
+    expect(result).toEqual(success(ctx, []));
+  })
+
+  test('returns success if there is one to parse', () => {
+    const ctx = {text:"a", index:0};
+    const charParser: Parser<string> = parseChar;
+    const parser: Parser<string[]> =  parseUpToNReduce(charParser, 1);
+
+    const result = parser(ctx);
+
+    const endCxt = {text: "a", index: 1};
+    expect(result).toEqual(success(endCxt, ["a"]))
+  })
+
+  test('returns success if there is more than 1 to parse', () => {
+    const ctx = {text:"abc", index:0};
+    const charParser: Parser<string> = parseChar;
+    const parser: Parser<string[]> =  parseUpToNReduce(charParser, 2);
+
+    const result = parser(ctx);
+
+    const endCxt = {text: "abc", index: 2};
+    expect(result).toEqual(success(endCxt, ["a", "b"]))
+  })
+
+  test('returns success if there is less than n', () => {
+    const ctx = {text:"abc", index:0};
+    const charParser: Parser<string> = parseChar;
+    const parser: Parser<string[]> =  parseUpToNReduce(charParser, 5);
+
+    const result = parser(ctx);
+
+    const endCxt = {text: "abc", index: 3};
+    expect(result).toEqual(success(endCxt, ["a", "b", "c"]))
+  })
+
 })
