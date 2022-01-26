@@ -15,5 +15,8 @@
   },
   "scripts": {
     "test": "jest"
+  },
+  "dependencies": {
+    "fp-ts": "^2.11.8"
   }
 }

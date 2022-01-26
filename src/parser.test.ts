@@ -1,6 +1,12 @@
 
 
 // to track progress through our input string.
+
+import { getBindingIdentifiers } from "@babel/types";
+
+import {Option} from "fp-ts/lib/Option"
+import * as O from "fp-ts/lib/Option"
+
 // we should make this immutable, because we can.
 type Context = Readonly<{
   text: string; // the full input string
@@ -52,6 +58,46 @@ const parseChar: Parser<string> = (ctx: Context) => {
   }
   return failure(ctx, "no characters");
 }
+
+type Char = string
+type Digit = number
+const toNumber = (c: Char): Option<Digit> => {
+  const num = parseInt(c);
+  return isNaN(num)? O.none: O.some(num);
+}
+
+const parseDigit: Parser<Digit> = (ctx: Context) => {
+  const charResult = parseChar(ctx);
+  if (charResult.success) {
+    const digitResult = toNumber(charResult.value)
+    return O.fold<Digit, Result<Digit>>(
+      () => failure(ctx, "not a digit"),
+      (d) => success(charResult.ctx, d))
+      (digitResult);
+  }
+  return charResult; // Failure
+}
+
+
+describe('parseDigit', () => {
+  test('fails when there are no characters', () => {
+    const cxt = {text: "", index:0};
+    const result = parseDigit(cxt);
+    expect(result).toEqual(failure(cxt, "no characters"))
+  });
+
+  test('fails when there are no digits', () => {
+    const cxt = {text: "abc", index:0};
+    const result = parseDigit(cxt);
+    expect(result).toEqual(failure(cxt, "not a digit"))
+  });
+
+  test('succeeds when there are is a digit', () => {
+    const cxt = {text: "723abc", index:0};
+    const result = parseDigit(cxt);
+    expect(result).toEqual(success(moveIndex(cxt, 1), 7))
+  });
+})
 
 const parseString: (s: string) => Parser<string> = (s: string) => (ctx: Context) => {
   if (ctx.index + s.length <= ctx.text.length) {
@@ -143,6 +189,92 @@ const sequential = <A,B>(parserA: Parser<A>, parserB: Parser<B>): Parser<[A, B]>
     return failureResult;
   }
 
+
+// List.Reduce Parser<T[]>
+const parseUpToNReduce: <T>(parser: Parser<T>, max: number)=> Parser<T[]> = <T>(parser: Parser<T>, max: number): Parser<T[]> =>
+(ctx: Context) => {
+  if (max < 0)
+    throw "InvalidparseUpToNReduceuse of parseUpToNV2";
+
+  if (max === 0) {
+    return success(ctx, []);
+  }
+
+  const a = Array(max).fill(parser);
+
+  const initialValue: Success<T[]> = success(ctx, []);
+  const reducer = (prev: Success<T[]>, current: Parser<T>) => {
+    const r1: Result<T> = current(prev.ctx);
+    return r1.success?
+       success(r1.ctx, prev.value.concat([r1.value]))
+       : prev;
+  };
+  const result: Success<T[]> = a.reduce(reducer, initialValue)
+  return result;
+}
+
+const map = <A,B>(parserA: Parser<A>, f: (a:A) => B): Parser<B> => {
+  return (ctx: Context) => {
+    const aResult = parserA(ctx);
+    return aResult.success?
+      success(aResult.ctx, f(aResult.value)) :
+      aResult;
+  }
+}
+
+const parseAtLeastOne = <A>(parserOne: Parser<A>, parserZeroOrMany: Parser<A[]>): Parser<A[]> =>
+  map(sequential(parserOne, parserZeroOrMany), (a: [A, A[]]) => [a[0]].concat(a[1]));
+
+
+describe('parseAtLeastOne', () => {
+  test('if no A fails', () => {
+    const ctx = {text: "abc", index:0};
+    const parser = parseAtLeastOne<number>(parseDigit, parseUpToNReduce(parseDigit, 1000));
+    const result = parser(ctx);
+    expect(result).toEqual(failure(ctx, "could not parse A then B"));
+  })
+
+  test('if one A succeeds', () => {
+    const ctx = {text: "8bc", index:0};
+    const parser = parseAtLeastOne<number>(parseDigit, parseUpToNReduce(parseDigit, 1000));
+    const result = parser(ctx);
+    expect(result).toEqual(success(moveIndex(ctx, 1), [8]));
+  })
+
+  test('if many A succeeds', () => {
+    const ctx = {text: "814c", index:0};
+    const parser = parseAtLeastOne<number>(parseDigit, parseUpToNReduce(parseDigit, 1000));
+    const result = parser(ctx);
+    expect(result).toEqual(success(moveIndex(ctx, 3), [8, 1, 4]));
+  })
+})
+
+const parseInteger: Parser<number> = 
+  map(
+    parseAtLeastOne<number>(parseDigit, parseUpToNReduce(parseDigit, 1000)),
+    (digits: Digit[]) => parseInt(digits.join('')));
+
+describe('parseInteger', () => {
+  test('if no digits fails', () => {
+    const ctx = {text: "abc", index:0};
+    const result = parseInteger(ctx);
+    expect(result).toEqual(failure(ctx, "could not parse A then B"));
+  })
+
+  test('if one digit succeeds', () => {
+    const ctx = {text: "8bc", index:0};
+    const result = parseInteger(ctx);
+    expect(result).toEqual(success(moveIndex(ctx, 1), 8));
+  })
+
+  test('if many digits succeeds', () => {
+    const ctx = {text: "814c", index:0};
+    const parser = parseAtLeastOne<number>(parseDigit, parseUpToNReduce(parseDigit, 1000));
+    const result = parseInteger(ctx);
+    expect(result).toEqual(success(moveIndex(ctx, 3), 814));
+  })
+})
+
 describe('bind', () => {
 
   test('bind sequentially parses part1 then part2', () => {
@@ -216,17 +348,11 @@ describe('alternative tests', () => {
   })
 })
 
-const map = <A,B>(parserA: Parser<A>, f: (a:A) => B): Parser<B> => {
-  return (ctx: Context) => {
-    const aResult = parserA(ctx);
-    return aResult.success?
-      success(aResult.ctx, f(aResult.value)) :
-      aResult;
-  }
-}
 
 describe('map', () => {
 
+  // Warning: since parseInt can fail, this isn't a good idea because exceptions get throw.
+  // Purely illustrative of map.
   test('maps entity inside the parser', () => {
     const ctx = {text:"123", index:0};
     const parser: Parser<string> =  parseString("123");
@@ -261,29 +387,6 @@ const parseUpToNRecursive: <T>(parser: Parser<T>, max: number)=> Parser<T[]> = <
   }
 }
 
-
-// List.Reduce Parser<T[]>
-const parseUpToNReduce: <T>(parser: Parser<T>, max: number)=> Parser<T[]> = <T>(parser: Parser<T>, max: number): Parser<T[]> =>
-(ctx: Context) => {
-  if (max < 0)
-    throw "InvalidparseUpToNReduceuse of parseUpToNV2";
-
-  if (max === 0) {
-    return success(ctx, []);
-  }
-
-  const a = Array(max).fill(parser);
-
-  const initialValue: Success<T[]> = success(ctx, []);
-  const reducer = (prev: Success<T[]>, current: Parser<T>) => {
-    const r1: Result<T> = current(prev.ctx);
-    return r1.success?
-       success(r1.ctx, prev.value.concat([r1.value]))
-       : prev;
-  };
-  const result: Success<T[]> = a.reduce(reducer, initialValue)
-  return result;
-}
 
 
 describe('parseUpToNRecursive', () => {
