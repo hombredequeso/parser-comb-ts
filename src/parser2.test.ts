@@ -1,189 +1,4 @@
-import { boolean } from "fp-ts";
-
-// we should make this immutable, because we can.
-type Context = Readonly<{
-  text: string; // the full input string
-  index: number; // our current position in it
-}>;
-
-const moveIndex = (ctx: Context, count: number) => (
-  {
-    text: ctx.text,
-    index: ctx.index + count
-  });
-
-// our result types
-type Result<T> = Success<T> | Failure;
-
-
-// on success we'll return a value of type T, and a new Ctx
-// (position in the string) to continue parsing from
-type Success<T> = Readonly<{
-  success: true;
-  value: T;
-  ctx: Context;
-}>;
-
-// when we fail we want to know where and why
-type Failure = Readonly<{
-  success: false;
-  expected: string;
-  ctx: Context;
-}>;
-
-// every parsing function will have this signature
-type Parser<T> = (ctx: Context) => Result<T>;
-
-
-// some convenience methods to build `Result`s for us
-const success: <T>(ctx: Context, value: T) => Success<T> = <T>(ctx: Context, value: T): Success<T> => {
-  return { success: true, value, ctx };
-}
-
-const failure = (ctx: Context, expected: string): Failure => {
-  return { success: false, expected, ctx };
-}
-
-
-type char = string
-const any: Parser<char> = (ctx: Context) =>
-  (ctx.text.length > ctx.index)
-    ? success(moveIndex(ctx, 1), ctx.text[ctx.index])
-    : failure(ctx, "expected char; end of input")
-
-
-type unit = {}
-const eof: Parser<unit> = (ctx: Context) =>
-  ctx.text.length === ctx.index
-    ? success(ctx, {})
-    : failure(ctx, "not eof")
-
-
-// Functor
-
-const fmap = <A, B>(f: (a: A) => B) => (p: Parser<A>) => (ctx: Context) => {
-  const a: Result<A> = p(ctx);
-  return a.success ?
-    success(a.ctx, f(a.value)) :
-    a;
-}
-
-const mapFailure = <A>(f: (f: Failure) => Failure) => (p: Parser<A>) => 
-(ctx: Context) => {
-  const a: Result<A> = p(ctx);
-  return a.success
-  ? a
-  : f(a)
-}
-
-const mapFailureString = <A>(err: string, parser: Parser<A>): Parser<A> =>
-  mapFailure<A>((f: Failure) => failure(f.ctx, err))(parser)
-
-// Applicative
-
-const pure = <T>(t: T) => (ctx: Context) => success(ctx, t)
-
-
-// Monad
-
-const bind = <A, B>(parserA: Parser<A>, f: (a: A) => Parser<B>): Parser<B> =>
-  (ctx: Context) => {
-    const resultA: Result<A> = parserA(ctx);
-    const resultB: Result<B> = resultA.success ?
-      f(resultA.value)(resultA.ctx) :
-      resultA;
-    return resultB;
-  }
-
-const tryParse = <A>(parser: Parser<A>) => (ctx: Context) => {
-  const a = parser(ctx);
-  return a.success
-    ? a
-    : failure(ctx, (a as Failure).expected);
-}
-
-// Use tryParse to run the Parser, but if isn't what we want then backtrack.
-const satisfy = (errMsg: string) => (predicate: (c: char) => boolean) => tryParse(
-  (ctx: Context) => {
-    const anyResult = any(ctx);
-    return anyResult.success
-      ? (predicate(anyResult.value) ? anyResult : failure(ctx, errMsg))
-      : anyResult;
-  }
-);
-
-
-// Using monadic type operations to run sequences of parsers
-
-// Different ways of doing the same thing:
-// 2:
-
-const sequential2 = <A, B>(parserA: Parser<A>, parserB: Parser<B>): Parser<[A, B]> =>
-  bind(parserA, a => fmap<B, [A, B]>((b) => [a, b])(parserB));
-
-const sequential2b = <A, B>(parserA: Parser<A>, parserB: Parser<B>): Parser<[A, B]> =>
-  bind(parserA, a => (ctx: Context) => {
-    const result = parserB(ctx);
-    return result.success
-      ? success<[A, B]>(result.ctx, [a, result.value])
-      : result;
-  });
-
-// 3:
-
-const extendTuple2 = <A, B, C>(a: [A, B], c: C): [A, B, C] => [a[0], a[1], c]
-const sequential3  = <A, B, C>(parserA: Parser<A>, parserB: Parser<B>, parserC: Parser<C>): Parser<[A, B, C]> => 
-  bind(sequential2(parserA, parserB), (a: [A, B]) => fmap<C, [A,B,C]>((c: C) => extendTuple2(a,c))(parserC));
-
-const sequential3b = <A, B, C>(parserA: Parser<[A, B]>, parserC: Parser<C>): Parser<[A, B, C]> =>
-  bind(parserA, (a: [A, B]) => (ctx: Context) => {
-    const result = parserC(ctx);
-    return result.success
-      ? success<[A, B, C]>(result.ctx, extendTuple2(a, result.value))
-      : result;
-  });
-const sequential3c = <A, B, C>(parserA: Parser<A>, parserB: Parser<B>, parserC: Parser<C>): Parser<[A, B, C]> =>
-  sequential3b(sequential2b(parserA, parserB), parserC);
-
-
-// 4:
-
-const extendTuple3 = <A, B, C, D>(a: [A, B, C], d: D): [A, B, C, D] => [a[0], a[1], a[2], d]
-const sequential4 = <A, B, C, D>(parserA: Parser<A>, parserB: Parser<B>, parserC: Parser<C>, parserD: Parser<D>): Parser<[A, B, C, D]> =>
-  bind(sequential3(parserA, parserB, parserC), (a: [A,B,C]) => fmap<D, [A,B,C,D]>((d:D) => extendTuple3(a, d))(parserD));
-
-const sequential4b = <A, B, C, D>(parserA: Parser<[A, B, C]>, parserD: Parser<D>): Parser<[A, B, C, D]> =>
-  bind(parserA, (a: [A, B, C]) => (ctx: Context) => {
-    const result = parserD(ctx);
-    return result.success
-      ? success<[A, B, C, D]>(result.ctx, extendTuple3(a, result.value))
-      : result;
-  });
-
-const extendTuple4 = <A, B, C, D, E>(a: [A, B, C, D], e: E): [A, B, C, D, E] => [a[0], a[1], a[2], a[3], e]
-const sequential5 = <A, B, C, D, E>(parserA: Parser<A>, parserB: Parser<B>, parserC: Parser<C>, parserD: Parser<D>, parserE: Parser<E>): Parser<[A, B, C, D, E]> =>
-  bind(sequential4(parserA, parserB, parserC, parserD), (a: [A,B,C,D]) => fmap<E, [A,B,C,D,E]>((e:E) => extendTuple4(a, e))(parserE));
-
-// const sequential5 = <A, B, C, D, E>(parserA: Parser<A>, parserB: Parser<B>, parserC: Parser<C>, parserD: Parser<D>, parserE: Parser<E>): Parser<[A, B, C, D, E]> =>
-//   sequential4b(sequential3c(parserA, parserB, parserC), parserD);
-
-// Or type operations
-
-const alt = <A>(parser1: Parser<A>, parser2: Parser<A>): Parser<A> =>
-  (ctx: Context) => {
-    const parser1Result = parser1(ctx);
-    if (parser1Result.success) {
-      return parser1Result;
-    }
-    if (parser1Result.ctx.index == ctx.index) {
-      return parser2(ctx);
-    }
-    return parser1Result;
-  }
-
-const errorParser = <A>(errMsg: string): Parser<A> => (ctx: Context) => failure(ctx, errMsg);
-
-const choice = <A>(err: string, parsers: Parser<A>[]) => parsers.reduce((a, b) => alt(b, a), errorParser(err))
+import { alt, any, bind, char, choice, Context, eof, failure, fmap, many, many1, moveIndex, Parser, Result, satisfy, sequential2, sequential2b, sequential3, sequential4, success, tryParse } from "./parsers";
 
 
 describe('any', () => {
@@ -434,5 +249,33 @@ describe('alt', () => {
 
     expect(anyOfParser(ctx))
       .toEqual(failure(ctx, "not x or digit or full stop"))
+  })
+})
+
+
+describe('many/many1', () => {
+  test('fails when nothing matches', () => {
+    const ctx = { text: "abc", index: 0 };
+    const xParser: Parser<char> = satisfy('not x')(isX);
+
+    expect(many(xParser)(ctx)).toEqual(success(ctx, []))
+    expect(many1(xParser)(ctx)).toEqual(failure(ctx, 'not x'))
+  }),
+
+
+  test('succeeds something matches', () => {
+    const ctx = { text: "xbc", index: 0 };
+    const xParser: Parser<char> = satisfy('not x')(isX);
+
+    expect(many(xParser)(ctx)).toEqual(success(moveIndex(ctx, 1), ['x']))
+    expect(many1(xParser)(ctx)).toEqual(success(moveIndex(ctx, 1), ['x']))
+  })
+
+  test('succeeds many matches', () => {
+    const ctx = { text: "123bc", index: 0 };
+    const digitParser: Parser<char> = satisfy('not digit')(isDigit);
+
+    expect(many(digitParser)(ctx)).toEqual(success(moveIndex(ctx, 3), ['1', '2', '3']))
+    expect(many1(digitParser)(ctx)).toEqual(success(moveIndex(ctx, 3), ['1', '2', '3']))
   })
 })
