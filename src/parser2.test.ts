@@ -131,15 +131,15 @@ const sequential2b = <A, B>(parserA: Parser<A>, parserB: Parser<B>): Parser<[A, 
 
 // 3:
 
-const extendTuple = <A, B, C>(a: [A, B], c: C): [A, B, C] => [a[0], a[1], c]
+const extendTuple2 = <A, B, C>(a: [A, B], c: C): [A, B, C] => [a[0], a[1], c]
 const sequential3  = <A, B, C>(parserA: Parser<A>, parserB: Parser<B>, parserC: Parser<C>): Parser<[A, B, C]> => 
-  bind(sequential2(parserA, parserB), (a: [A, B]) => fmap<C, [A,B,C]>((c: C) => [a[0], a[1], c])(parserC));
+  bind(sequential2(parserA, parserB), (a: [A, B]) => fmap<C, [A,B,C]>((c: C) => extendTuple2(a,c))(parserC));
 
 const sequential3b = <A, B, C>(parserA: Parser<[A, B]>, parserC: Parser<C>): Parser<[A, B, C]> =>
   bind(parserA, (a: [A, B]) => (ctx: Context) => {
     const result = parserC(ctx);
     return result.success
-      ? success<[A, B, C]>(result.ctx, extendTuple(a, result.value))
+      ? success<[A, B, C]>(result.ctx, extendTuple2(a, result.value))
       : result;
   });
 const sequential3c = <A, B, C>(parserA: Parser<A>, parserB: Parser<B>, parserC: Parser<C>): Parser<[A, B, C]> =>
@@ -148,18 +148,21 @@ const sequential3c = <A, B, C>(parserA: Parser<A>, parserB: Parser<B>, parserC: 
 
 // 4:
 
-const extendTuple4 = <A, B, C, D>(a: [A, B, C], d: D): [A, B, C, D] => [a[0], a[1], a[2], d]
+const extendTuple3 = <A, B, C, D>(a: [A, B, C], d: D): [A, B, C, D] => [a[0], a[1], a[2], d]
+const sequential4 = <A, B, C, D>(parserA: Parser<A>, parserB: Parser<B>, parserC: Parser<C>, parserD: Parser<D>): Parser<[A, B, C, D]> =>
+  bind(sequential3(parserA, parserB, parserC), (a: [A,B,C]) => fmap<D, [A,B,C,D]>((d:D) => extendTuple3(a, d))(parserD));
+
 const sequential4b = <A, B, C, D>(parserA: Parser<[A, B, C]>, parserD: Parser<D>): Parser<[A, B, C, D]> =>
   bind(parserA, (a: [A, B, C]) => (ctx: Context) => {
     const result = parserD(ctx);
     return result.success
-      ? success<[A, B, C, D]>(result.ctx, extendTuple4(a, result.value))
+      ? success<[A, B, C, D]>(result.ctx, extendTuple3(a, result.value))
       : result;
   });
 
-
-const sequential4 = <A, B, C, D>(parserA: Parser<A>, parserB: Parser<B>, parserC: Parser<C>, parserD: Parser<D>): Parser<[A, B, C, D]> =>
-  sequential4b(sequential3c(parserA, parserB, parserC), parserD);
+const extendTuple4 = <A, B, C, D, E>(a: [A, B, C, D], e: E): [A, B, C, D, E] => [a[0], a[1], a[2], a[3], e]
+const sequential5 = <A, B, C, D, E>(parserA: Parser<A>, parserB: Parser<B>, parserC: Parser<C>, parserD: Parser<D>, parserE: Parser<E>): Parser<[A, B, C, D, E]> =>
+  bind(sequential4(parserA, parserB, parserC, parserD), (a: [A,B,C,D]) => fmap<E, [A,B,C,D,E]>((e:E) => extendTuple4(a, e))(parserE));
 
 // const sequential5 = <A, B, C, D, E>(parserA: Parser<A>, parserB: Parser<B>, parserC: Parser<C>, parserD: Parser<D>, parserE: Parser<E>): Parser<[A, B, C, D, E]> =>
 //   sequential4b(sequential3c(parserA, parserB, parserC), parserD);
@@ -387,8 +390,6 @@ describe('messin with monadic style', () => {
   })
 
 describe('alt', () => {
-
-
   test('fails when nothing matches', () => {
     const ctx = { text: "abc", index: 0 };
     const xParser: Parser<char> = satisfy('not x')(isX);
