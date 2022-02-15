@@ -118,10 +118,10 @@ const satisfy = (errMsg: string) => (predicate: (c: char) => boolean) => tryPars
 // Different ways of doing the same thing:
 // 2:
 
-const sequential2c = <A, B>(parserA: Parser<A>, parserB: Parser<B>): Parser<[A, B]> =>
+const sequential2 = <A, B>(parserA: Parser<A>, parserB: Parser<B>): Parser<[A, B]> =>
   bind(parserA, a => fmap<B, [A, B]>((b) => [a, b])(parserB));
 
-const sequential2 = <A, B>(parserA: Parser<A>, parserB: Parser<B>): Parser<[A, B]> =>
+const sequential2b = <A, B>(parserA: Parser<A>, parserB: Parser<B>): Parser<[A, B]> =>
   bind(parserA, a => (ctx: Context) => {
     const result = parserB(ctx);
     return result.success
@@ -132,8 +132,8 @@ const sequential2 = <A, B>(parserA: Parser<A>, parserB: Parser<B>): Parser<[A, B
 // 3:
 
 const extendTuple = <A, B, C>(a: [A, B], c: C): [A, B, C] => [a[0], a[1], c]
-const sequential3d  = <A, B, C>(parserA: Parser<A>, parserB: Parser<B>, parserC: Parser<C>): Parser<[A, B, C]> => 
-  bind(sequential2c(parserA, parserB), (a: [A, B]) => fmap<C, [A,B,C]>((c: C) => [a[0], a[1], c])(parserC));
+const sequential3  = <A, B, C>(parserA: Parser<A>, parserB: Parser<B>, parserC: Parser<C>): Parser<[A, B, C]> => 
+  bind(sequential2(parserA, parserB), (a: [A, B]) => fmap<C, [A,B,C]>((c: C) => [a[0], a[1], c])(parserC));
 
 const sequential3b = <A, B, C>(parserA: Parser<[A, B]>, parserC: Parser<C>): Parser<[A, B, C]> =>
   bind(parserA, (a: [A, B]) => (ctx: Context) => {
@@ -142,12 +142,11 @@ const sequential3b = <A, B, C>(parserA: Parser<[A, B]>, parserC: Parser<C>): Par
       ? success<[A, B, C]>(result.ctx, extendTuple(a, result.value))
       : result;
   });
-const sequential3 = <A, B, C>(parserA: Parser<A>, parserB: Parser<B>, parserC: Parser<C>): Parser<[A, B, C]> =>
-  sequential3b(sequential2(parserA, parserB), parserC);
+const sequential3c = <A, B, C>(parserA: Parser<A>, parserB: Parser<B>, parserC: Parser<C>): Parser<[A, B, C]> =>
+  sequential3b(sequential2b(parserA, parserB), parserC);
 
 
 // 4:
-
 
 const extendTuple4 = <A, B, C, D>(a: [A, B, C], d: D): [A, B, C, D] => [a[0], a[1], a[2], d]
 const sequential4b = <A, B, C, D>(parserA: Parser<[A, B, C]>, parserD: Parser<D>): Parser<[A, B, C, D]> =>
@@ -160,8 +159,10 @@ const sequential4b = <A, B, C, D>(parserA: Parser<[A, B, C]>, parserD: Parser<D>
 
 
 const sequential4 = <A, B, C, D>(parserA: Parser<A>, parserB: Parser<B>, parserC: Parser<C>, parserD: Parser<D>): Parser<[A, B, C, D]> =>
-  sequential4b(sequential3(parserA, parserB, parserC), parserD);
+  sequential4b(sequential3c(parserA, parserB, parserC), parserD);
 
+// const sequential5 = <A, B, C, D, E>(parserA: Parser<A>, parserB: Parser<B>, parserC: Parser<C>, parserD: Parser<D>, parserE: Parser<E>): Parser<[A, B, C, D, E]> =>
+//   sequential4b(sequential3c(parserA, parserB, parserC), parserD);
 
 // Or type operations
 
@@ -307,7 +308,7 @@ describe('messin with monadic style', () => {
     const ctx = { text: "abc", index: 0 };
     const xParser: Parser<char> = satisfy('not x')(isX)
     const digitParser: Parser<number> = fmap(parseInt)(satisfy('not digit')(isDigit))
-    const xThenDigitParser: Parser<[char, number]> = sequential2(xParser, digitParser);
+    const xThenDigitParser: Parser<[char, number]> = sequential2b(xParser, digitParser);
 
     expect(xThenDigitParser(ctx)).toEqual(failure(ctx, 'not x'));
   })
@@ -316,34 +317,74 @@ describe('messin with monadic style', () => {
     const ctx = { text: "xbc", index: 0 };
     const xParser: Parser<char> = satisfy('not x')(isX)
     const digitParser: Parser<number> = fmap(parseInt)(satisfy('not digit')(isDigit))
-    const xThenDigitParser: Parser<[char, number]> = sequential2(xParser, digitParser);
+    const xThenDigitParser: Parser<[char, number]> = sequential2b(xParser, digitParser);
 
     expect(xThenDigitParser(ctx)).toEqual(failure(moveIndex(ctx, 1), 'not digit'));
   })
 
 
 
-  describe('sequential2c', () => {
-    test('when not parserA', () => {
-      const ctx = { text: "abc", index: 0 };
-      const xParser: Parser<char> = satisfy('not x')(isX)
-      const digitParser: Parser<number> = fmap(parseInt)(satisfy('not digit')(isDigit))
-      const xThenDigitParser: Parser<[char, number]> = sequential2c(xParser, digitParser);
-
-      expect(xThenDigitParser(ctx)).toEqual(failure(ctx, "not x"));
-    })
-
-    test('fails when not parserB, but parserA succeeds', () => {
-      const ctx = { text: "xbc", index: 0 };
-      const xParser: Parser<char> = satisfy('not x')(isX)
-      const digitParser: Parser<number> = fmap(parseInt)(satisfy('not digit')(isDigit))
-      const xThenDigitParser: Parser<[char, number]> = sequential2c(xParser, digitParser);
-
-      expect(xThenDigitParser(ctx)).toEqual(failure(moveIndex(ctx, 1), "not digit"));
-    })
-  })
 })
 
+  describe('sequential2', () => {
+
+    const xParser: Parser<char> = satisfy('not x')(isX)
+    const digitParser: Parser<number> = fmap(parseInt)(satisfy('not digit')(isDigit))
+    const xThenDigitParser: Parser<[char, number]> = sequential2(xParser, digitParser);
+
+    const sequential2TestData: [string, Context, Result<[string, number]>][] = [
+      ["if parserA fails, parser fails", { text: "abc", index: 0 }, failure({ text: "abc", index: 0 }, "not x")],
+      ["if parserB fails, parser fails", { text: "xbc", index: 0 }, failure({ text: "xbc", index: 1 }, "not digit")],
+      ["if parserA/B succeed, parser succeeds", { text: "x7bc", index: 0 }, success({ text: "x7bc", index: 2 }, ['x', 7])]
+    ];
+
+    test.each(sequential2TestData
+    )('%s', (testName: string, ctx: Context, expected: Result<[string, number]>) => {
+      expect(xThenDigitParser(ctx)).toEqual(expected);
+    })
+  })
+
+  describe('sequential3', () => {
+
+    const xParser: Parser<char> = satisfy('not x')(isX)
+    const digitParser: Parser<number> = fmap(parseInt)(satisfy('not digit')(isDigit))
+    const fullStopParser: Parser<char> = satisfy('not fullstop')(isFullStop);
+    const xDigitFullStopParser: Parser<[char, number, char]> = sequential3(xParser, digitParser,fullStopParser);
+
+    const sequential3TestData: [string, Context, Result<[char, number, char]>][] = [
+      ["if parserA fails, parser fails", { text: "abc", index: 0 }, failure({ text: "abc", index: 0 }, "not x")],
+      ["if parserB fails, parser fails", { text: "xbc", index: 0 }, failure({ text: "xbc", index: 1 }, "not digit")],
+      ["if parserC fails, parser fails", { text: "x7cd", index: 0 }, failure({ text: "x7cd", index: 2 }, "not fullstop")],
+      ["if parserA/B/C succeed, parser succeeds", { text: "x7.c", index: 0 }, success({ text: "x7.c", index: 3 }, ['x', 7, '.'])]
+    ];
+
+    test.each(sequential3TestData
+    )('%s', (testName: string, ctx: Context, expected: Result<[char, number, char]>) => {
+      expect(xDigitFullStopParser(ctx)).toEqual(expected);
+    })
+  })
+
+
+  describe('sequential4', () => {
+
+    const xParser: Parser<char> = satisfy('not x')(isX)
+    const digitParser: Parser<number> = fmap(parseInt)(satisfy('not digit')(isDigit))
+    const fullStopParser: Parser<char> = satisfy('not fullstop')(isFullStop);
+    const testParser: Parser<[char, number, char,number]> = sequential4(xParser, digitParser,fullStopParser, digitParser);
+
+    const sequential4TestData: [string, Context, Result<[char, number, char, number]>][] = [
+      ["if parserA fails, parser fails", { text: "abcde", index: 0 }, failure({ text: "abcde", index: 0 }, "not x")],
+      ["if parserB fails, parser fails", { text: "xbcde", index: 0 }, failure({ text: "xbcde", index: 1 }, "not digit")],
+      ["if parserC fails, parser fails", { text: "x7cde", index: 0 }, failure({ text: "x7cde", index: 2 }, "not fullstop")],
+      ["if parserD fails, parser fails", { text: "x7.de", index: 0 }, failure({ text: "x7.de", index: 3 }, "not digit")],
+      ["if parserA/B/C/D succeed, parser succeeds", { text: "x7.3e", index: 0 }, success({ text: "x7.3e", index: 4 }, ['x', 7, '.', 3])]
+    ];
+
+    test.each(sequential4TestData
+    )('%s', (testName: string, ctx: Context, expected: Result<[char, number, char, number]>) => {
+      expect(testParser(ctx)).toEqual(expected);
+    })
+  })
 
 describe('alt', () => {
 
