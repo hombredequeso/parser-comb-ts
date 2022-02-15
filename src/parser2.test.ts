@@ -115,32 +115,26 @@ const satisfy = (errMsg: string) => (predicate: (c: char) => boolean) => tryPars
 
 // Using monadic type operations to run sequences of parsers
 
-// 3 ways of doing the same thing (sort of):
+// Different ways of doing the same thing:
+// 2:
+
+const sequential2c = <A, B>(parserA: Parser<A>, parserB: Parser<B>): Parser<[A, B]> =>
+  bind(parserA, a => fmap<B, [A, B]>((b) => [a, b])(parserB));
+
 const sequential2 = <A, B>(parserA: Parser<A>, parserB: Parser<B>): Parser<[A, B]> =>
-  tryParse(bind(parserA, a => (ctx: Context) => {
+  bind(parserA, a => (ctx: Context) => {
     const result = parserB(ctx);
     return result.success
       ? success<[A, B]>(result.ctx, [a, result.value])
       : result;
-  }));
+  });
 
-const sequential2b = <A, B>(parserA: Parser<A>, parserB: Parser<B>): Parser<[A, B]> =>
-  (ctx1: Context) => {
-    const resultA = parserA(ctx1);
-    if (!resultA.success) {
-      return resultA;
-    }
-    const resultB = parserB(resultA.ctx);
-    if (!resultB.success) {
-      return failure(ctx1, "not a then b")
-    }
-    return success(resultB.ctx, [resultA.value, resultB.value]);
-  }
-
-const sequential2c = <A, B>(parserA: Parser<A>, parserB: Parser<B>, err: string): Parser<[A, B]> =>
-  mapFailureString(err, tryParse(bind(parserA, a => fmap<B, [A, B]>((b) => [a, b])(parserB))));
+// 3:
 
 const extendTuple = <A, B, C>(a: [A, B], c: C): [A, B, C] => [a[0], a[1], c]
+const sequential3d  = <A, B, C>(parserA: Parser<A>, parserB: Parser<B>, parserC: Parser<C>): Parser<[A, B, C]> => 
+  bind(sequential2c(parserA, parserB), (a: [A, B]) => fmap<C, [A,B,C]>((c: C) => [a[0], a[1], c])(parserC));
+
 const sequential3b = <A, B, C>(parserA: Parser<[A, B]>, parserC: Parser<C>): Parser<[A, B, C]> =>
   bind(parserA, (a: [A, B]) => (ctx: Context) => {
     const result = parserC(ctx);
@@ -148,13 +142,11 @@ const sequential3b = <A, B, C>(parserA: Parser<[A, B]>, parserC: Parser<C>): Par
       ? success<[A, B, C]>(result.ctx, extendTuple(a, result.value))
       : result;
   });
-
-
-const sequential3c = <A, B, C>(parserA: Parser<[A, B]>, parserC: Parser<C>): Parser<[A, B, C]> =>
-  tryParse(bind(parserA, (a: [A, B]) => fmap((c: C) => extendTuple(a, c))(parserC)));
-
 const sequential3 = <A, B, C>(parserA: Parser<A>, parserB: Parser<B>, parserC: Parser<C>): Parser<[A, B, C]> =>
   sequential3b(sequential2(parserA, parserB), parserC);
+
+
+// 4:
 
 
 const extendTuple4 = <A, B, C, D>(a: [A, B, C], d: D): [A, B, C, D] => [a[0], a[1], a[2], d]
@@ -165,6 +157,7 @@ const sequential4b = <A, B, C, D>(parserA: Parser<[A, B, C]>, parserD: Parser<D>
       ? success<[A, B, C, D]>(result.ctx, extendTuple4(a, result.value))
       : result;
   });
+
 
 const sequential4 = <A, B, C, D>(parserA: Parser<A>, parserB: Parser<B>, parserC: Parser<C>, parserD: Parser<D>): Parser<[A, B, C, D]> =>
   sequential4b(sequential3(parserA, parserB, parserC), parserD);
@@ -319,13 +312,13 @@ describe('messin with monadic style', () => {
     expect(xThenDigitParser(ctx)).toEqual(failure(ctx, 'not x'));
   })
 
-  test('fails when not parserB', () => {
+  test('fails when not parserB, but parserA succeeds', () => {
     const ctx = { text: "xbc", index: 0 };
     const xParser: Parser<char> = satisfy('not x')(isX)
     const digitParser: Parser<number> = fmap(parseInt)(satisfy('not digit')(isDigit))
     const xThenDigitParser: Parser<[char, number]> = sequential2(xParser, digitParser);
 
-    expect(xThenDigitParser(ctx)).toEqual(failure(ctx, 'not digit'));
+    expect(xThenDigitParser(ctx)).toEqual(failure(moveIndex(ctx, 1), 'not digit'));
   })
 
 
@@ -335,23 +328,20 @@ describe('messin with monadic style', () => {
       const ctx = { text: "abc", index: 0 };
       const xParser: Parser<char> = satisfy('not x')(isX)
       const digitParser: Parser<number> = fmap(parseInt)(satisfy('not digit')(isDigit))
-      const xThenDigitParser: Parser<[char, number]> = sequential2c(xParser, digitParser, "not x or digit");
+      const xThenDigitParser: Parser<[char, number]> = sequential2c(xParser, digitParser);
 
-      expect(xThenDigitParser(ctx)).toEqual(failure(ctx, "not x or digit"));
+      expect(xThenDigitParser(ctx)).toEqual(failure(ctx, "not x"));
     })
 
-    test('fails when not parserB', () => {
+    test('fails when not parserB, but parserA succeeds', () => {
       const ctx = { text: "xbc", index: 0 };
       const xParser: Parser<char> = satisfy('not x')(isX)
       const digitParser: Parser<number> = fmap(parseInt)(satisfy('not digit')(isDigit))
-      const xThenDigitParser: Parser<[char, number]> = sequential2c(xParser, digitParser, "not x or digit");
+      const xThenDigitParser: Parser<[char, number]> = sequential2c(xParser, digitParser);
 
-      expect(xThenDigitParser(ctx)).toEqual(failure(ctx, "not x or digit"));
+      expect(xThenDigitParser(ctx)).toEqual(failure(moveIndex(ctx, 1), "not digit"));
     })
   })
-
-
-
 })
 
 
