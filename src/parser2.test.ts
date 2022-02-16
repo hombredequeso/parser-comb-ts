@@ -42,7 +42,7 @@ const isDigit = (c: char) => (c >= '0' && c <= '9');
 describe('satisfy', () => {
   test('fails when predicate not met', () => {
     const ctx = { text: "abc", index: 0 };
-    expect(satisfy('expected "x"')(isX)(ctx)).toEqual(failure(ctx, 'expected "x"; actual: "a"'))
+    expect(satisfy('expected "x"')(isX)(ctx)).toEqual(failure(ctx, 'expected "x"; actual: "a"; index=0'))
   })
 
   test('succeeds when predicate met', () => {
@@ -57,7 +57,7 @@ describe('fmap', () => {
     const ctx = { text: "abc", index: 0 };
     const digitParser: Parser<number> = fmap(parseInt)(satisfy('expected digit')(isDigit))
     expect(digitParser(ctx))
-      .toEqual(failure(ctx, 'expected digit; actual: "a"'))
+      .toEqual(failure(ctx, 'expected digit; actual: "a"; index=0'))
   })
 
   test('passes when digit', () => {
@@ -85,7 +85,7 @@ describe('monadic bind', () => {
 
     const result: Parser<[char, number]> = bind(xParser, digitBinder);
     expect(result(ctx))
-      .toEqual(failure(ctx, 'expected: "x"; actual: "a"'))
+      .toEqual(failure(ctx, 'expected: "x"; actual: "a"; index=0'))
   })
 
   test('passes when digit', () => {
@@ -113,14 +113,14 @@ describe('messin with monadic style', () => {
     const ctx = { text: "abc", index: 0 };
     const xThenDigitParser: Parser<[char, number]> = sequential2b(xParser, digitParser);
 
-    expect(xThenDigitParser(ctx)).toEqual(failure(ctx, 'expected: "x"; actual: "a"'));
+    expect(xThenDigitParser(ctx)).toEqual(failure(ctx, 'expected: "x"; actual: "a"; index=0'));
   })
 
   test('fails when not parserB, but parserA succeeds', () => {
     const ctx = { text: "xbc", index: 0 };
     const xThenDigitParser: Parser<[char, number]> = sequential2b(xParser, digitParser);
 
-    expect(xThenDigitParser(ctx)).toEqual(failure(moveIndex(ctx, 1), 'expected: digit; actual: "b"'));
+    expect(xThenDigitParser(ctx)).toEqual(failure(moveIndex(ctx, 1), 'expected: digit; actual: "b"; index=1'));
   })
 
 
@@ -132,8 +132,8 @@ describe('messin with monadic style', () => {
     const xThenDigitParser: Parser<[char, number]> = sequential2(xParser, digitParser);
 
     const sequential2TestData: [string, Context, Result<[string, number]>][] = [
-      ["if parserA fails, parser fails", { text: "abc", index: 0 }, failure({ text: "abc", index: 0 }, 'expected: "x"; actual: "a"')],
-      ["if parserB fails, parser fails", { text: "xbc", index: 0 }, failure({ text: "xbc", index: 1 }, 'expected: digit; actual: "b"')],
+      ["if parserA fails, parser fails", { text: "abc", index: 0 }, failure({ text: "abc", index: 0 }, 'expected: "x"; actual: "a"; index=0')],
+      ["if parserB fails, parser fails", { text: "xbc", index: 0 }, failure({ text: "xbc", index: 1 }, 'expected: digit; actual: "b"; index=1')],
       ["if parserA/B succeed, parser succeeds", { text: "x7bc", index: 0 }, success({ text: "x7bc", index: 2 }, ['x', 7])]
     ];
 
@@ -149,9 +149,9 @@ describe('messin with monadic style', () => {
     const xDigitFullStopParser: Parser<[char, number, char]> = sequential3(xParser, digitParser,fullStopParser);
 
     const sequential3TestData: [string, Context, Result<[char, number, char]>][] = [
-      ["if parserA fails, parser fails", { text: "abc", index: 0 }, failure({ text: "abc", index: 0 }, 'expected: "x"; actual: "a"')],
-      ["if parserB fails, parser fails", { text: "xbc", index: 0 }, failure({ text: "xbc", index: 1 }, 'expected: digit; actual: "b"')],
-      ["if parserC fails, parser fails", { text: "x7cd", index: 0 }, failure({ text: "x7cd", index: 2 }, 'expected: "."; actual: "c"')],
+      ["if parserA fails, parser fails", { text: "abc", index: 0 }, failure({ text: "abc", index: 0 }, 'expected: "x"; actual: "a"; index=0')],
+      ["if parserB fails, parser fails", { text: "xbc", index: 0 }, failure({ text: "xbc", index: 1 }, 'expected: digit; actual: "b"; index=1')],
+      ["if parserC fails, parser fails", { text: "x7cd", index: 0 }, failure({ text: "x7cd", index: 2 }, 'expected: "."; actual: "c"; index=2')],
       ["if parserA/B/C succeed, parser succeeds", { text: "x7.c", index: 0 }, success({ text: "x7.c", index: 3 }, ['x', 7, '.'])]
     ];
 
@@ -168,10 +168,10 @@ describe('messin with monadic style', () => {
     const testParser: Parser<[char, number, char,number]> = sequential4(xParser, digitParser,fullStopParser, digitParser);
 
     const sequential4TestData: [string, Context, Result<[char, number, char, number]>][] = [
-      ["if parserA fails, parser fails", { text: "abcde", index: 0 }, failure({ text: "abcde", index: 0 }, 'expected: "x"; actual: "a"')],
-      ["if parserB fails, parser fails", { text: "xbcde", index: 0 }, failure({ text: "xbcde", index: 1 }, 'expected: digit; actual: "b"')],
-      ["if parserC fails, parser fails", { text: "x7cde", index: 0 }, failure({ text: "x7cde", index: 2 }, 'expected: "."; actual: "c"')],
-      ["if parserD fails, parser fails", { text: "x7.de", index: 0 }, failure({ text: "x7.de", index: 3 }, 'expected: digit; actual: "d"')],
+      ["if parserA fails, parser fails", { text: "abcde", index: 0 }, failure({ text: "abcde", index: 0 }, 'expected: "x"; actual: "a"; index=0')],
+      ["if parserB fails, parser fails", { text: "xbcde", index: 0 }, failure({ text: "xbcde", index: 1 }, 'expected: digit; actual: "b"; index=1')],
+      ["if parserC fails, parser fails", { text: "x7cde", index: 0 }, failure({ text: "x7cde", index: 2 }, 'expected: "."; actual: "c"; index=2')],
+      ["if parserD fails, parser fails", { text: "x7.de", index: 0 }, failure({ text: "x7.de", index: 3 }, 'expected: digit; actual: "d"; index=3')],
       ["if parserA/B/C/D succeed, parser succeeds", { text: "x7.3e", index: 0 }, success({ text: "x7.3e", index: 4 }, ['x', 7, '.', 3])]
     ];
 
@@ -189,7 +189,7 @@ describe('alt', () => {
     const xOrDigit: Parser<char> = alt(xParser, digitParser);
 
     expect(xOrDigit(ctx))
-      .toEqual(failure(ctx, 'expected: digit; actual: "a"'))
+      .toEqual(failure(ctx, 'expected: digit; actual: "a"; index=0'))
   })
 
   test('passes when first matches', () => {
@@ -234,7 +234,7 @@ describe('many/many1', () => {
     const ctx = { text: "abc", index: 0 };
 
     expect(many(xParser)(ctx)).toEqual(success(ctx, []))
-    expect(many1(xParser)(ctx)).toEqual(failure(ctx, 'expected: "x"; actual: "a"'))
+    expect(many1(xParser)(ctx)).toEqual(failure(ctx, 'expected: "x"; actual: "a"; index=0'))
   }),
 
 

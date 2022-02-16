@@ -131,7 +131,7 @@ export const satisfy = (errMsg: string) => (predicate: (c: char) => boolean) => 
   (ctx: Context) => {
     const anyResult = any(ctx);
     return anyResult.success
-      ? (predicate(anyResult.value) ? anyResult : failure(ctx, `${errMsg}; actual: "${anyResult.value}"`))
+      ? (predicate(anyResult.value) ? anyResult : failure(ctx, `${errMsg}; actual: "${anyResult.value}"; index=${ctx.index}`))
       : anyResult;
   }
 );
