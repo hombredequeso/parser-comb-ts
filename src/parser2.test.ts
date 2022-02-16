@@ -289,4 +289,45 @@ describe('apply', () => {
 
       expect(appliedSecondParam(ctx)).toEqual(c);
     })
+
+    test('example 1 use of apply', () => {
+      // curried add function: curried form of add(a: number, b: number)
+      const add = (a: number) => (b: number): number => a + b;
+
+      const digitParser: Parser<number> = fmap(parseInt)(satisfy('not digit')(isDigit))
+
+      const part1: Parser<(b:number) => number> = fmap(add)(digitParser);
+      const part2: Parser<number> = apply(part1, digitParser);
+      // apply(fmap(add)(digitParser), digitParser)
+
+      const ctx = {text: "12zzz", index:0};
+      const result = part2(ctx);
+
+      expect(result).toEqual(success(moveIndex(ctx, 2), 3));
+    })
+
+    interface Point {
+      x: number,
+      y: number
+    }
+
+    test('example 2 use of apply', () => {
+      // like a constructor to create a point, but curried.
+      const point = (a: number) => (b: number): Point => <Point>{x: a, y: b};
+
+      const digitParser: Parser<number> = fmap(parseInt)(satisfy('not digit')(isDigit))
+      const isSpace = (c: char) => (c === ' ');
+      const spaceParser: Parser<char> = satisfy('not whitespace')(isSpace);
+      const digitThenSpaceParser: Parser<number> = fmap((a: [number, string]) => a[0])(sequential2(digitParser, spaceParser));
+      const part1: Parser<(b:number) => Point> = fmap(point)(digitThenSpaceParser);
+      
+      // This is what we were building towards: a Point parser. 
+      // It is premised on consuming text intended to represent points like: "1 2 ....". Where "1 2 " is to be interpreted as a Point (1,2)
+      const part2: Parser<Point> = apply(part1, digitThenSpaceParser);
+
+      const ctx = {text: "1 2 somethingElse", index:0};
+      const result = part2(ctx);
+
+      expect(result).toEqual(success(moveIndex(ctx, 4), {x:1, y:2}));
+    })
 })
