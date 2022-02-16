@@ -42,7 +42,7 @@ const isDigit = (c: char) => (c >= '0' && c <= '9');
 describe('satisfy', () => {
   test('fails when predicate not met', () => {
     const ctx = { text: "abc", index: 0 };
-    expect(satisfy('not x')(isX)(ctx)).toEqual(failure(ctx, "not x"))
+    expect(satisfy('expected "x"')(isX)(ctx)).toEqual(failure(ctx, 'expected "x"; actual: "a"'))
   })
 
   test('succeeds when predicate met', () => {
@@ -55,9 +55,9 @@ describe('fmap', () => {
   test('fails when not digit', () => {
     // const xParser: Parser<char> = satisfy('not x')(isX)
     const ctx = { text: "abc", index: 0 };
-    const digitParser: Parser<number> = fmap(parseInt)(satisfy('not digit')(isDigit))
+    const digitParser: Parser<number> = fmap(parseInt)(satisfy('expected digit')(isDigit))
     expect(digitParser(ctx))
-      .toEqual(failure(ctx, 'not digit'))
+      .toEqual(failure(ctx, 'expected digit; actual: "a"'))
   })
 
   test('passes when digit', () => {
@@ -70,11 +70,12 @@ describe('fmap', () => {
 })
 
 
+const xParser: Parser<char> = satisfy('expected: "x"')(isX)
+const digitParser: Parser<number> = fmap(parseInt)(satisfy('expected: digit')(isDigit))
+
 describe('monadic bind', () => {
   test('fails when not digit', () => {
     const ctx = { text: "abc", index: 0 };
-    const xParser: Parser<char> = satisfy('not x')(isX)
-    const digitParser: Parser<number> = fmap(parseInt)(satisfy('not digit')(isDigit))
     const digitBinder = (x: char) => (ctx: Context) => {
       const result = digitParser(ctx);
       return result.success
@@ -84,14 +85,12 @@ describe('monadic bind', () => {
 
     const result: Parser<[char, number]> = bind(xParser, digitBinder);
     expect(result(ctx))
-      .toEqual(failure(ctx, 'not x'))
+      .toEqual(failure(ctx, 'expected: "x"; actual: "a"'))
   })
 
   test('passes when digit', () => {
     const ctx = { text: "x7abc", index: 0 };
-    const xParser: Parser<char> = satisfy('not x')(isX)
-    const digitParser: Parser<number> = fmap(parseInt)(satisfy('not digit')(isDigit))
-    const digitBinder = (x: char): Parser<[char, number]> => (ctx: Context) => {
+    const _digitBinder = (x: char): Parser<[char, number]> => (ctx: Context) => {
       const result = digitParser(ctx);
       return result.success
         ? success<[char, number]>(result.ctx, [x, result.value])
@@ -112,20 +111,16 @@ describe('messin with monadic style', () => {
 
   test('fails when not parserA', () => {
     const ctx = { text: "abc", index: 0 };
-    const xParser: Parser<char> = satisfy('not x')(isX)
-    const digitParser: Parser<number> = fmap(parseInt)(satisfy('not digit')(isDigit))
     const xThenDigitParser: Parser<[char, number]> = sequential2b(xParser, digitParser);
 
-    expect(xThenDigitParser(ctx)).toEqual(failure(ctx, 'not x'));
+    expect(xThenDigitParser(ctx)).toEqual(failure(ctx, 'expected: "x"; actual: "a"'));
   })
 
   test('fails when not parserB, but parserA succeeds', () => {
     const ctx = { text: "xbc", index: 0 };
-    const xParser: Parser<char> = satisfy('not x')(isX)
-    const digitParser: Parser<number> = fmap(parseInt)(satisfy('not digit')(isDigit))
     const xThenDigitParser: Parser<[char, number]> = sequential2b(xParser, digitParser);
 
-    expect(xThenDigitParser(ctx)).toEqual(failure(moveIndex(ctx, 1), 'not digit'));
+    expect(xThenDigitParser(ctx)).toEqual(failure(moveIndex(ctx, 1), 'expected: digit; actual: "b"'));
   })
 
 
@@ -134,13 +129,11 @@ describe('messin with monadic style', () => {
 
   describe('sequential2', () => {
 
-    const xParser: Parser<char> = satisfy('not x')(isX)
-    const digitParser: Parser<number> = fmap(parseInt)(satisfy('not digit')(isDigit))
     const xThenDigitParser: Parser<[char, number]> = sequential2(xParser, digitParser);
 
     const sequential2TestData: [string, Context, Result<[string, number]>][] = [
-      ["if parserA fails, parser fails", { text: "abc", index: 0 }, failure({ text: "abc", index: 0 }, "not x")],
-      ["if parserB fails, parser fails", { text: "xbc", index: 0 }, failure({ text: "xbc", index: 1 }, "not digit")],
+      ["if parserA fails, parser fails", { text: "abc", index: 0 }, failure({ text: "abc", index: 0 }, 'expected: "x"; actual: "a"')],
+      ["if parserB fails, parser fails", { text: "xbc", index: 0 }, failure({ text: "xbc", index: 1 }, 'expected: digit; actual: "b"')],
       ["if parserA/B succeed, parser succeeds", { text: "x7bc", index: 0 }, success({ text: "x7bc", index: 2 }, ['x', 7])]
     ];
 
@@ -152,15 +145,13 @@ describe('messin with monadic style', () => {
 
   describe('sequential3', () => {
 
-    const xParser: Parser<char> = satisfy('not x')(isX)
-    const digitParser: Parser<number> = fmap(parseInt)(satisfy('not digit')(isDigit))
-    const fullStopParser: Parser<char> = satisfy('not fullstop')(isFullStop);
+    const fullStopParser: Parser<char> = satisfy('expected: "."')(isFullStop);
     const xDigitFullStopParser: Parser<[char, number, char]> = sequential3(xParser, digitParser,fullStopParser);
 
     const sequential3TestData: [string, Context, Result<[char, number, char]>][] = [
-      ["if parserA fails, parser fails", { text: "abc", index: 0 }, failure({ text: "abc", index: 0 }, "not x")],
-      ["if parserB fails, parser fails", { text: "xbc", index: 0 }, failure({ text: "xbc", index: 1 }, "not digit")],
-      ["if parserC fails, parser fails", { text: "x7cd", index: 0 }, failure({ text: "x7cd", index: 2 }, "not fullstop")],
+      ["if parserA fails, parser fails", { text: "abc", index: 0 }, failure({ text: "abc", index: 0 }, 'expected: "x"; actual: "a"')],
+      ["if parserB fails, parser fails", { text: "xbc", index: 0 }, failure({ text: "xbc", index: 1 }, 'expected: digit; actual: "b"')],
+      ["if parserC fails, parser fails", { text: "x7cd", index: 0 }, failure({ text: "x7cd", index: 2 }, 'expected: "."; actual: "c"')],
       ["if parserA/B/C succeed, parser succeeds", { text: "x7.c", index: 0 }, success({ text: "x7.c", index: 3 }, ['x', 7, '.'])]
     ];
 
@@ -173,16 +164,14 @@ describe('messin with monadic style', () => {
 
   describe('sequential4', () => {
 
-    const xParser: Parser<char> = satisfy('not x')(isX)
-    const digitParser: Parser<number> = fmap(parseInt)(satisfy('not digit')(isDigit))
-    const fullStopParser: Parser<char> = satisfy('not fullstop')(isFullStop);
+    const fullStopParser: Parser<char> = satisfy('expected: "."')(isFullStop);
     const testParser: Parser<[char, number, char,number]> = sequential4(xParser, digitParser,fullStopParser, digitParser);
 
     const sequential4TestData: [string, Context, Result<[char, number, char, number]>][] = [
-      ["if parserA fails, parser fails", { text: "abcde", index: 0 }, failure({ text: "abcde", index: 0 }, "not x")],
-      ["if parserB fails, parser fails", { text: "xbcde", index: 0 }, failure({ text: "xbcde", index: 1 }, "not digit")],
-      ["if parserC fails, parser fails", { text: "x7cde", index: 0 }, failure({ text: "x7cde", index: 2 }, "not fullstop")],
-      ["if parserD fails, parser fails", { text: "x7.de", index: 0 }, failure({ text: "x7.de", index: 3 }, "not digit")],
+      ["if parserA fails, parser fails", { text: "abcde", index: 0 }, failure({ text: "abcde", index: 0 }, 'expected: "x"; actual: "a"')],
+      ["if parserB fails, parser fails", { text: "xbcde", index: 0 }, failure({ text: "xbcde", index: 1 }, 'expected: digit; actual: "b"')],
+      ["if parserC fails, parser fails", { text: "x7cde", index: 0 }, failure({ text: "x7cde", index: 2 }, 'expected: "."; actual: "c"')],
+      ["if parserD fails, parser fails", { text: "x7.de", index: 0 }, failure({ text: "x7.de", index: 3 }, 'expected: digit; actual: "d"')],
       ["if parserA/B/C/D succeed, parser succeeds", { text: "x7.3e", index: 0 }, success({ text: "x7.3e", index: 4 }, ['x', 7, '.', 3])]
     ];
 
@@ -195,13 +184,12 @@ describe('messin with monadic style', () => {
 describe('alt', () => {
   test('fails when nothing matches', () => {
     const ctx = { text: "abc", index: 0 };
-    const xParser: Parser<char> = satisfy('not x')(isX);
-    const digitParser: Parser<char> = satisfy('not digit')(isDigit);
+    const digitParser: Parser<char> = satisfy('expected: digit')(isDigit);
 
     const xOrDigit: Parser<char> = alt(xParser, digitParser);
 
     expect(xOrDigit(ctx))
-      .toEqual(failure(ctx, "not digit"))
+      .toEqual(failure(ctx, 'expected: digit; actual: "a"'))
   })
 
   test('passes when first matches', () => {
@@ -244,10 +232,9 @@ describe('alt', () => {
 describe('many/many1', () => {
   test('fails when nothing matches', () => {
     const ctx = { text: "abc", index: 0 };
-    const xParser: Parser<char> = satisfy('not x')(isX);
 
     expect(many(xParser)(ctx)).toEqual(success(ctx, []))
-    expect(many1(xParser)(ctx)).toEqual(failure(ctx, 'not x'))
+    expect(many1(xParser)(ctx)).toEqual(failure(ctx, 'expected: "x"; actual: "a"'))
   }),
 
 
