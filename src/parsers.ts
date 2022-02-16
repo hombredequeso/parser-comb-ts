@@ -44,6 +44,8 @@ export const failure = (ctx: Context, expected: string): Failure => {
   return { success: false, expected, ctx };
 }
 
+// convenience method to be able to map over Result (as if it were an Either)
+
 
 export type char = string
 export const any: Parser<char> = (ctx: Context) =>
@@ -81,8 +83,30 @@ export const mapFailureString = <A>(err: string, parser: Parser<A>): Parser<A> =
 
 // Applicative
 
-export const pure = <T>(t: T) => (ctx: Context) => success(ctx, t)
+export const pure = <T>(t: T) => (ctx: Context) => success(ctx, t);
 
+export const apply = <A,B>(parserf: Parser<(a:A) => B>, parserA: Parser<A>): Parser<B> => 
+    (ctx: Context) => {
+      const f: Result<(a:A)=>B> = parserf(ctx);
+      return f.success
+        ? fmap((a:A) => f.value(a))(parserA)(f.ctx)
+        : f;
+    }
+
+export const applyInLongForm = <A,B>(parserf: Parser<(a:A) => B>, parserA: Parser<A>): Parser<B> => 
+    (ctx: Context) => {
+        const x: Result<(a:A) => B> = parserf(ctx)
+        if (x.success) {
+            const a: Result<A> = parserA(x.ctx);
+            if (a.success) {
+                const result: Result<B> =  success(a.ctx, x.value(a.value))
+                return result;
+            } else {
+                return a;
+            }
+        }
+        return x;
+    }
 
 // Monad
 
@@ -207,4 +231,12 @@ export const many = <A>(parser: Parser<A>): Parser<A[]> => (ctx: Context) => {
 export const many1 = <A>(parser: Parser<A>): Parser<A[]> =>
   bind(parser, (a: A): Parser<A[]> => fmap((as: A[]) => prepend(a, as))(many(parser)));
 
+const addToParser = <A>(prev: Parser<A[]>, curr: Parser<A>) =>
+    fmap((x: [A[],A]) => x[0].concat([x[1]]))(sequential2(prev, curr));
 
+// Of the traversable variety.
+const sequence = <A>(parsers: [Parser<A>]): Parser<A[]> => {
+    const emptyParser: Parser<A[]> = (ctx: Context) => success<A[]>(ctx, []);
+    const result: Parser<A[]> = parsers.reduce(addToParser, emptyParser)
+    return result;
+}

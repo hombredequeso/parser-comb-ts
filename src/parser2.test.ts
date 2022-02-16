@@ -1,4 +1,4 @@
-import { alt, any, bind, char, choice, Context, eof, failure, fmap, many, many1, moveIndex, Parser, Result, satisfy, sequential2, sequential2b, sequential3, sequential4, success, tryParse } from "./parsers";
+import { alt, any, apply, bind, char, choice, Context, eof, failure, fmap, many, many1, moveIndex, Parser, Result, satisfy, sequential2, sequential2b, sequential3, sequential4, success, tryParse } from "./parsers";
 
 
 describe('any', () => {
@@ -103,18 +103,6 @@ describe('monadic bind', () => {
       .toEqual(success(moveIndex(ctx, 2), ['x', 7]))
   })
 
-  const xSpace7Parser = (xParser: Parser<char>, spaceParser: Parser<char>, sevenParser: Parser<number>): Parser<string> => {
-    return tryParse(bind(xParser, (xChar: char) => (ctx: Context) => {
-      const spaceResult = spaceParser(ctx);
-      if (spaceResult.success) {
-        const sevenResult = sevenParser(spaceResult.ctx);
-        if (sevenResult.success) {
-          return success(sevenResult.ctx, xChar + sevenResult.value.toString())
-        }
-      }
-      return failure(ctx, "wrong")
-    }));
-  }
 })
 
 
@@ -278,4 +266,27 @@ describe('many/many1', () => {
     expect(many(digitParser)(ctx)).toEqual(success(moveIndex(ctx, 3), ['1', '2', '3']))
     expect(many1(digitParser)(ctx)).toEqual(success(moveIndex(ctx, 3), ['1', '2', '3']))
   })
+})
+
+describe('apply', () => {
+
+    const ctx = { text: "", index: 0 };
+    const applyTestData: [string, Result<number>,Result<number>, Result<number>][] = [
+      ["success + success = success", success({ text: "123", index: 1 }, 1), success({ text: "123", index: 2 }, 2), success({ text: "123", index: 2 }, 3)],
+      ["success + failure = failure", success({ text: "1x3", index: 1 }, 1), failure({ text: "1x3", index: 1 }, ""), failure({ text: "1x3", index: 1 }, "")],
+      ["failure + success = failure", failure({ text: "x12", index: 1 }, ""),success({ text: "x12", index: 2 }, 2), failure({ text: "x12", index: 1 }, '')],
+      ["failure + failure = failure", failure({ text: "xy2", index: 1 }, ""),failure({ text: "xy2", index: 2 }, ''), failure({ text: "xy2", index: 1 }, '')],
+    ];
+
+    test.each(applyTestData
+    )('%s', (testName: string, a: Result<number>,b: Result<number>, c: Result<number>) => {
+      const aParser = (c: Context) => a;
+      const bParser = (c: Context) => b;
+
+      const f = (a: number) => (b: number) => a + b;
+      const mappedFirstParam: Parser<(b:number)=>number> = fmap(f)(aParser)
+      const appliedSecondParam: Parser<number> = apply(mappedFirstParam, bParser);
+
+      expect(appliedSecondParam(ctx)).toEqual(c);
+    })
 })
