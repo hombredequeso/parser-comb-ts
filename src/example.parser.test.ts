@@ -30,10 +30,11 @@ export const satisfyGeneral = <A>(errMsg: string) => (parser: Parser<A>) => (pre
 );
 
 type measureType = 'cup' | 'kg' | 'gram';
-const measureTransform: [string, measureType][] = [['cup', 'cup'], ['cups', 'cup'], ['kg', 'kg'], ['kilogram', 'kg'], ['kilos', 'kg']];
+const measureTransform: [string, measureType][] = [['cup', 'cup'], ['cups', 'cup'], ['kg', 'kg'], ['kilogram', 'kg'], ['kilos', 'kg'], ['kgs', 'kg']];
 const toMeasureType: Map<string, measureType> = new Map(measureTransform);
 const measureParsers2: Parser<string>[] = ['cup', 'cups', 'kg'].map(str => satisfyGeneral<string>("not ${str")(wordParser)(w => w === str));
 const measureParsers3: Parser<measureType>[] = measureTransform.map(str => fmap(s => str[1])(satisfyGeneral<string>("not ${str[0]}")(wordParser)(w => w === str[0])));
+const measureTypeParser: Parser<measureType> = choice("expected: measureType", measureParsers3);
 // const measureParsers4: Parser<measureType>[] = measureParsers3.map(p => fmap<string, measureType>(str => toMeasureType.get(str))(p));
 const measureParserB: Parser<string> = choice("not a measure", measureParsers2)
 
