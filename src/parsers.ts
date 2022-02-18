@@ -63,6 +63,7 @@ export const eof: Parser<unit> = (ctx: Context) =>
 
 // Functor
 
+// (list.map)
 export const fmap = <A, B>(f: (a: A) => B) => (p: Parser<A>) => (ctx: Context) => {
   const a: Result<A> = p(ctx);
   return a.success ?
@@ -110,6 +111,7 @@ export const applyInLongForm = <A,B>(parserf: Parser<(a:A) => B>, parserA: Parse
 
 // Monad
 
+// 
 export const bind = <A, B>(parserA: Parser<A>, f: (a: A) => Parser<B>): Parser<B> =>
   (ctx: Context) => {
     const resultA: Result<A> = parserA(ctx);
@@ -131,7 +133,7 @@ export const satisfy = (errMsg: string) => (predicate: (c: char) => boolean) => 
   (ctx: Context) => {
     const anyResult = any(ctx);
     return anyResult.success
-      ? (predicate(anyResult.value) ? anyResult : failure(ctx, `${errMsg}; actual: "${anyResult.value}"; index=${ctx.index}`))
+      ? (predicate(anyResult.value) ? anyResult : failure(anyResult.ctx, `${errMsg}; actual: "${anyResult.value}"; index=${ctx.index}`))
       : anyResult;
   }
 );
