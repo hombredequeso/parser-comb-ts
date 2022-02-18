@@ -1,6 +1,6 @@
 
 import { number } from "fp-ts";
-import { alt, any, bind, char, choice, Context, eof, failure, fmap, many1, moveIndex, Parser, Result, satisfy, sequential2, sequential2b, sequential3, sequential4, success, tryParse, unit } from "./parsers";
+import { alt, any, bind, char, choice, Context, eof, failure, fmap, many1, moveIndex, Parser, Result, satisfy, satisfyA, sequential2, sequential2b, sequential3, sequential4, success, tryParse, unit } from "./parsers";
 
 // 10 cups water
 // 3grams tea
@@ -20,20 +20,12 @@ const spaceParser: Parser<char> = satisfy('not whitespace')(isSpace);
 const whiteSpaceParser: Parser<string[]> = many1(spaceParser);
 
 
-export const satisfyGeneral = <A>(errMsg: string) => (parser: Parser<A>) => (predicate: (a: A) => boolean): Parser<A> => tryParse(
-  (ctx: Context) => {
-    const anyResult = parser(ctx);
-    return anyResult.success
-      ? (predicate(anyResult.value) ? anyResult : failure(ctx, errMsg))
-      : anyResult;
-  }
-);
 
 
 // 'cups'
-const cupsParser: Parser<string> = satisfyGeneral<string>('not cups')(wordParser)(w => w === 'cups');
+const cupsParser: Parser<string> = satisfyA<string>('expected "cups"')(wordParser)(w => w === 'cups');
 // 'grams'
-const gramsParser: Parser<string> = satisfyGeneral<string>('not grams')(wordParser)(w => w === 'grams');
+const gramsParser: Parser<string> = satisfyA<string>('not grams')(wordParser)(w => w === 'grams');
 // measure = 'cups' || 'grams'
 const measureParser = choice('not a measurement', [cupsParser, gramsParser]);
 
@@ -67,10 +59,11 @@ interface Ingredient {
 }
 
 const measurementParserA: Parser<[number, string[], string]> = sequential3(numberParser, whiteSpaceParser, measureParser)
-// measurement: number whitespace meaure
+// measurement: number whitespace unit
 const measurementParser: Parser<Measurement> = tryParse(fmap((x: [number, string[], string]) => ({ amount: x[0], unit: x[2] }))(measurementParserA));
 
 const ingredientParserA: Parser<[Measurement, string[], string]> = sequential3(measurementParser, whiteSpaceParser, wordParser);
+
 // ingredient: measurement whitespace word
 const ingredientParser: Parser<Ingredient> = tryParse(
     fmap<[Measurement, string[], string], Ingredient>(
@@ -85,7 +78,7 @@ describe('test parsers', () => {
 
   test('cups parser failure', () => {
     const ctx = { text: "123def", index: 0 };
-    expect(cupsParser(ctx)).toEqual(failure(ctx, 'not cups'))
+    expect(cupsParser(ctx)).toEqual(failure(ctx, 'expected "cups"; actual: "123def"; index=0'))
   })
 
   test('cups parser success', () => {
@@ -136,6 +129,7 @@ describe('test parsers', () => {
   })
 })
 
+// Messing around with measurement types.
 type measureType = 'cup' | 'kg' | 'gram';
 const measuresKeyValue: [measureType, string[]][] = 
 [

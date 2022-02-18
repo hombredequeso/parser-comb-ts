@@ -43,9 +43,9 @@ export const failure = (ctx: Context, expected: string): Failure => {
   return { success: false, expected, ctx };
 }
 
-// convenience method to be able to map over Result (as if it were an Either)
+// Most basic parsers:
 
-
+// Parse any character at all. Only fails if the end of the file is reached.
 export type char = string
 export const any: Parser<char> = (ctx: Context) =>
   (ctx.text.length > ctx.index)
@@ -53,6 +53,7 @@ export const any: Parser<char> = (ctx: Context) =>
     : failure(ctx, "expected char; end of input")
 
 
+// Parse the end-of-file. Succeeds when at the end.
 export type unit = {}
 export const eof: Parser<unit> = (ctx: Context) =>
   ctx.text.length === ctx.index
@@ -60,9 +61,11 @@ export const eof: Parser<unit> = (ctx: Context) =>
     : failure(ctx, "not eof")
 
 
+// The major functional typeclasses:
+
 // Functor
 
-// (list.map)
+// Perhaps more commonly known as 'map'.
 export const fmap = <A, B>(f: (a: A) => B) => (p: Parser<A>) => (ctx: Context) => {
   const a: Result<A> = p(ctx);
   return a.success ?
@@ -70,6 +73,7 @@ export const fmap = <A, B>(f: (a: A) => B) => (p: Parser<A>) => (ctx: Context) =
     a;
 }
 
+// Amounting to 'mapLeft'.
 export const mapFailure = <A>(f: (f: Failure) => Failure) => (p: Parser<A>) => 
 (ctx: Context) => {
   const a: Result<A> = p(ctx);
@@ -82,6 +86,7 @@ export const mapFailureString = <A>(err: string, parser: Parser<A>): Parser<A> =
   mapFailure<A>((f: Failure) => failure(f.ctx, err))(parser)
 
 // Applicative
+// These aren't really required, however, are implemented out of curiosity.
 
 export const pure = <T>(t: T) => (ctx: Context) => success(ctx, t);
 
@@ -109,8 +114,9 @@ export const applyInLongForm = <A,B>(parserf: Parser<(a:A) => B>, parserA: Parse
     }
 
 // Monad
+// Be very afraid... :-) 
 
-// 
+// Variously known as bind, flatMap, chain (in fp-ts)
 export const bind = <A, B>(parserA: Parser<A>, f: (a: A) => Parser<B>): Parser<B> =>
   (ctx: Context) => {
     const resultA: Result<A> = parserA(ctx);
@@ -120,6 +126,9 @@ export const bind = <A, B>(parserA: Parser<A>, f: (a: A) => Parser<B>): Parser<B
     return resultB;
   }
 
+
+// Take a parser, and if it fails, restore the original context - most notably including the
+// context's parsing index.
 export const tryParse = <A>(parser: Parser<A>) => (ctx: Context) => {
   const a = parser(ctx);
   return a.success
@@ -132,16 +141,31 @@ export const satisfy = (errMsg: string) => (predicate: (c: char) => boolean) => 
   (ctx: Context) => {
     const anyResult = any(ctx);
     return anyResult.success
-      ? (predicate(anyResult.value) ? anyResult : failure(anyResult.ctx, `${errMsg}; actual: "${anyResult.value}"; index=${ctx.index}`))
+      ? (predicate(anyResult.value) 
+        ? anyResult 
+        : failure(anyResult.ctx, `${errMsg}; actual: "${anyResult.value}"; index=${ctx.index}`))
       : anyResult;
   }
 );
 
+// Same as satisfy, but for things other than characters.
+// Given a Parser<A>, tests 'A' with predicate to determine success or failure.
+export const satisfyA = <A>(errMsg: string) => (parser: Parser<A>) => (predicate: (a: A) => boolean): Parser<A> => tryParse(
+  (ctx: Context) => {
+    const anyResult = parser(ctx);
+    return anyResult.success
+      ? (predicate(anyResult.value)
+        ? anyResult
+        : failure(ctx, `${errMsg}; actual: "${anyResult.value}"; index=${ctx.index}`))
+      : anyResult;
+  }
+);
 
 // Using monadic type operations to run sequences of parsers
+// 'Do' notation isn't built into Javascript/Typescript (although can be emulated: https://gcanti.github.io/fp-ts/guides/do-notation.html)
 
-// Different ways of doing the same thing:
-// 2:
+// Primary use case is stringing one Parser after another.
+// So use monadic bind to return tuples of results from running one parser after another:
 
 export const sequential2 = <A, B>(parserA: Parser<A>, parserB: Parser<B>): Parser<[A, B]> =>
   bind(parserA, a => fmap<B, [A, B]>((b) => [a, b])(parserB));
@@ -189,8 +213,6 @@ export const extendTuple4 = <A, B, C, D, E>(a: [A, B, C, D], e: E): [A, B, C, D,
 export const sequential5 = <A, B, C, D, E>(parserA: Parser<A>, parserB: Parser<B>, parserC: Parser<C>, parserD: Parser<D>, parserE: Parser<E>): Parser<[A, B, C, D, E]> =>
   bind(sequential4(parserA, parserB, parserC, parserD), (a: [A,B,C,D]) => fmap<E, [A,B,C,D,E]>((e:E) => extendTuple4(a, e))(parserE));
 
-// const sequential5 = <A, B, C, D, E>(parserA: Parser<A>, parserB: Parser<B>, parserC: Parser<C>, parserD: Parser<D>, parserE: Parser<E>): Parser<[A, B, C, D, E]> =>
-//   sequential4b(sequential3c(parserA, parserB, parserC), parserD);
 
 // Or type operations
 
@@ -210,8 +232,8 @@ export const errorParser = <A>(errMsg: string): Parser<A> => (ctx: Context) => f
 
 export const choice = <A>(err: string, parsers: Parser<A>[]) => parsers.reduce((a, b) => alt(b, a), errorParser(err))
 
-
 export const prepend = <A>(a: A, as: A[]): A[] => [a].concat(as);
+
 // match 0 or more
 export const many = <A>(parser: Parser<A>): Parser<A[]> => (ctx: Context) => {
   const result = parser(ctx);
@@ -236,7 +258,7 @@ const addToParser = <A>(prev: Parser<A[]>, curr: Parser<A>) =>
     fmap((x: [A[],A]) => x[0].concat([x[1]]))(sequential2(prev, curr));
 
 // Of the traversable variety.
-const sequence = <A>(parsers: [Parser<A>]): Parser<A[]> => {
+const sequence = <A>(parsers: Parser<A>[]): Parser<A[]> => {
     const emptyParser: Parser<A[]> = (ctx: Context) => success<A[]>(ctx, []);
     const result: Parser<A[]> = parsers.reduce(addToParser, emptyParser)
     return result;
