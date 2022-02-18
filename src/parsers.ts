@@ -73,7 +73,7 @@ export const fmap = <A, B>(f: (a: A) => B) => (p: Parser<A>) => (ctx: Context) =
     a;
 }
 
-// Amounting to 'mapLeft'.
+// Amounting to 'mapLeft'
 export const mapFailure = <A>(f: (f: Failure) => Failure) => (p: Parser<A>) => 
 (ctx: Context) => {
   const a: Result<A> = p(ctx);

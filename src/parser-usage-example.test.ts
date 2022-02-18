@@ -1,6 +1,6 @@
 
 import { number } from "fp-ts";
-import { alt, any, bind, char, choice, Context, eof, failure, fmap, many1, moveIndex, Parser, Result, satisfy, satisfyA, sequential2, sequential2b, sequential3, sequential4, success, tryParse, unit } from "./parsers";
+import { alt, any, bind, char, choice, Context, eof, Failure, failure, fmap, many1, mapFailure, moveIndex, Parser, Result, satisfy, satisfyA, sequential2, sequential2b, sequential3, sequential4, success, tryParse, unit } from "./parsers";
 
 // 10 cups water
 // 3grams tea
@@ -136,17 +136,50 @@ const measuresKeyValue: [measureType, string[]][] =
   ['cup', ['cup', 'cups']],
   ['kg', ['kg', 'kgs', 'kilo', 'kilos', 'kilogram', 'kilograms']],
   ['gram', ['gram', 'grams']]
-
 ];
+
+const getMeasurementParsers = (measureType: measureType, measures: string[]): Parser<measureType> => {
+  const parsers: Parser<string>[] =
+    measures.map(s =>
+      satisfyA<string>(`expected ${s}`)(wordParser)(w => w === s)
+    )
+  const result: Parser<measureType>[] =
+    parsers.map(p => fmap(_s => measureType)(p));
+  const newResult = choice(`expected ${measureType.toString()}`, result)
+  return newResult;
+}
+
+const measureTypeParser = (dataIn: [measureType, string[]][]): Parser<measureType> => {
+  const parsers: Parser<measureType>[] = 
+    dataIn.map(x => getMeasurementParsers(x[0], x[1]));
+  const measurementParser: Parser<measureType> = choice('expected measureType', parsers)
+  const m2: Parser<measureType> =
+    mapFailure<measureType>
+      ((f: Failure) => failure(f.ctx, `${f.expected}; index=${f.ctx.index}`))
+      (measurementParser);
+  return m2;
+}
 
 const x = measuresKeyValue.flatMap(x => x[1].map(a => [a, x[0]]))
 
 
-// const measureTransform: [string, measureType][] = [['cup', 'cup'], ['cups', 'cup'], ['kg', 'kg'], ['kilogram', 'kg'], ['kilos', 'kg'], ['kgs', 'kg']];
-// const toMeasureType: Map<string, measureType> = new Map(measureTransform);
-// const measureParsers2: Parser<string>[] = ['cup', 'cups', 'kg'].map(str => satisfyGeneral<string>("not ${str")(wordParser)(w => w === str));
-// const measureParsers3: Parser<measureType>[] = measureTransform.map(str => fmap(s => str[1])(satisfyGeneral<string>("not ${str[0]}")(wordParser)(w => w === str[0])));
-// const measureTypeParser: Parser<measureType> = choice("expected: measureType", measureParsers3);
-// // const measureParsers4: Parser<measureType>[] = measureParsers3.map(p => fmap<string, measureType>(str => toMeasureType.get(str))(p));
-// const measureParserB: Parser<string> = choice("not a measure", measureParsers2)
+describe('measureType parsers', () => {
+  test('numberParser', () => {
+    const parser = measureTypeParser(measuresKeyValue);
+    const ctx = { text: "cup abc", index: 0 };
+    expect(parser(ctx)).toEqual(success(moveIndex(ctx, 3), 'cup'))
+  })
+
+  test('numberParser', () => {
+    const parser = measureTypeParser(measuresKeyValue);
+    const ctx = { text: "cups abc", index: 0 };
+    expect(parser(ctx)).toEqual(success(moveIndex(ctx, 4), 'cup'))
+  })
+
+  test('numberParser', () => {
+    const parser = measureTypeParser(measuresKeyValue);
+    const ctx = { text: "cupx abc", index: 0 };
+    expect(parser(ctx)).toEqual(failure(ctx, "expected measureType; index=0"));
+  })
+})
 
